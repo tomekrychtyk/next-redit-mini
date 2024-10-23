@@ -28,6 +28,7 @@ export const {
     }),
   ],
   callbacks: {
+    // usually not needed, just fixing a bug in next-auth
     async session({ session, user }: any) {
       if (session && user) {
         session.user.id = user.id;
