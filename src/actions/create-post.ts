@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { auth } from "@/auth";
+import db from "@/db";
 import paths from "@/paths";
 
 const createPostSchema = z.object({
@@ -21,6 +22,7 @@ interface CreatePostFormState {
 }
 
 export async function createPost(
+  slug: string,
   formState: CreatePostFormState,
   formData: FormData
 ): Promise<CreatePostFormState> {
@@ -35,8 +37,55 @@ export async function createPost(
     };
   }
 
-  return {
-    errors: {},
-  };
-  // revalidate the topic show page after creating a post
+  const session = await auth();
+  if (!session || !session.user) {
+    return {
+      errors: {
+        _form: ["You must be signed in"],
+      },
+    };
+  }
+
+  const topic = await db.topic.findFirst({
+    where: {
+      slug,
+    },
+  });
+
+  if (!topic) {
+    return {
+      errors: {
+        _form: ["Topic not found"],
+      },
+    };
+  }
+
+  let post: Post;
+  try {
+    post = await db.post.create({
+      data: {
+        title: result.data.title,
+        content: result.data.content,
+        topicId: topic.id,
+        userId: session.user.id,
+      },
+    });
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      return {
+        errors: {
+          _form: [error.message],
+        },
+      };
+    }
+
+    return {
+      errors: {
+        _form: ["Failed to create post"],
+      },
+    };
+  }
+
+  revalidatePath(paths.topicShow(slug));
+  redirect(paths.postShow(slug, post.id));
 }
